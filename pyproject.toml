@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "glycan_prediction_model"
+version = "0.0.0"
+dependencies = [
+    "polars",
+    "requests",
+    "gemmi",
+    "scipy",
+    "rcsbsearchapi",
+    "confection", 
+    "matplotlib", 
+    "plotly"
+]
+requires-python = ">=3.8"
+authors = [{ name = "Jordan Dialpuri", email = "jordan.dialpuri@york.ac.uk" },
+]
+
+readme = "README.md"

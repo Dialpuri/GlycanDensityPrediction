@@ -1,0 +1,5 @@
+srun --partition=gpu_interactive --ntasks=32 --gres=gpu:1 --time=2:00:00 --pty /bin/bash
+module purge
+module load Miniconda3/23.5.2-0
+ml TensorFlow/2.11.0-foss-2022a-CUDA-11.7.0
+source activate tf
