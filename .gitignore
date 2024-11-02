@@ -1,0 +1,9 @@
+*venv*
+*dataset*
+__pycache__
+*.err
+*.log
+DensityCalculator
+tests
+models
+inference_tests

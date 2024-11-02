@@ -80,6 +80,18 @@ def sample_generator(df: pl.DataFrame, config: dict):
             if config["dataset"]["normalise"]:
                 exp.normalize()
         
+            difference_map_path = sample["difference_path"].item()
+            
+            if not os.path.exists(difference_map_path): 
+                continue
+            
+            try:
+                diff = gemmi.read_ccp4_map(difference_map_path, setup=True).grid
+            except:
+                continue
+            if config["dataset"]["normalise_difference"]:
+                diff.normalize()
+
             target_map_path = sample["target_path"].item()
             target_map = gemmi.read_ccp4_map(target_map_path, setup=True)
             # target_map.grid.normalize()
@@ -102,18 +114,17 @@ def sample_generator(df: pl.DataFrame, config: dict):
                 translation = gemmi.Fractional(*np.random.rand(3))
             
             exp_array = _interpolate(exp, translation, rotation, False, config)
+            diff_array = _interpolate(diff, translation, rotation, False, config)
             tar_array = _interpolate(tar, translation, rotation, True, config)        
 
             if restrict:
                 thresold = pow(config["dataset"]["box_size"], 3) * config["dataset"]["sample_coverage_threshold"]
                 if np.sum(tar_array) > thresold:
-                    # print("Target Array sum", np.sum(tar_array))
-                    # yield exp_array, tar_array
-                    yield exp_array, tf.one_hot(np.round(tar_array), depth=2)
+                    yield tf.concat([exp_array, diff_array], axis=-1), tf.one_hot(np.round(tar_array), depth=2)
                 else:
                     print(np.sum(tar_array))
             else:
-                yield exp_array, tf.one_hot(np.round(tar_array), depth=2)
+                yield tf.concat([exp_array, diff_array], axis=-1), tf.one_hot(np.round(tar_array), depth=2)
 
 
 def _interpolate(
@@ -187,7 +198,7 @@ def train(config):
     size = config["dataset"]["box_size"]
     epochs = config["training"]["epochs"]
 
-    input = tf.TensorSpec(shape=(size, size, size, 1), dtype=tf.float32)
+    input = tf.TensorSpec(shape=(size, size, size, 2), dtype=tf.float32)
     output = tf.TensorSpec(shape=(size, size, size, 2), dtype=tf.int64)
 
     train_dataset = tf.data.Dataset.from_generator(
@@ -197,7 +208,7 @@ def train(config):
         lambda: _test_gen, output_signature=(input, output)
     )
     
-    model = unet.binary_model2()
+    model = unet.binary_model_64()
 
     loss = sigmoid_focal_crossentropy
 

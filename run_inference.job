@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=train               # Job name
+#SBATCH --job-name=infer               # Job name
 #SBATCH --partition=gpu               # What partition the job should run on
-#SBATCH --time=2-00:00:00               # Time limit (DD-HH:MM:SS)
+#SBATCH --time=1-00:00:00               # Time limit (DD-HH:MM:SS)
 #SBATCH --ntasks=1                      # Number of MPI tasks to request
 #SBATCH --cpus-per-task=32              # Number of CPU cores per MPI task
 #SBATCH --mem=160G                      # Total memory to request
@@ -22,4 +22,6 @@ module load Miniconda3/23.5.2-0
 ml TensorFlow/2.11.0-foss-2022a-CUDA-11.7.0
 source activate tf
 
-python glycan_prediction_model/training/train.py --config configurations/trial_8.cfg 
+# python inference_tests/run_inference_tests.py -model_path models/10-23-2024-09\:18\:50.keras -config configurations/trial_7.cfg 
+# python inference_tests/run_inference_tests.py -model_path models/10-18-2024-10:54:17.keras -config configurations/trial_7.cfg 
+python inference_tests/run_inference_tests.py -model_path models/10-30-2024-12:31:25.keras -config configurations/trial_7.cfg 

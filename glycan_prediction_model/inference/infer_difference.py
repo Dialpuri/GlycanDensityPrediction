@@ -29,11 +29,18 @@ def _main(args):
     input = Path(args.i)
     if '.map' in input.suffixes:
         input_grid = gemmi.read_ccp4_map(args.i).grid
+        difference_grid = gemmi.read_ccp4_map(args.d).grid
+        
+        input_grid.normalize()
+        difference_grid.normalize()
+        
     if '.mtz' in input.suffixes:
         input_mtz = gemmi.read_mtz_file(args.i)
         input_grid = input_mtz.transform_f_phi_to_map("FWT", "PHWT")
+        difference_grid = input_mtz.transform_f_phi_to_map("DELFWT", "PHDELWT")
 
-    _write_output(input_grid, str(output / f"input.map"))
+    _write_output(input_grid, str(output / f"input_best.map"))
+    _write_output(difference_grid, str(output / f"input_difference.map"))
 
     mask_grid = None
 
@@ -47,8 +54,8 @@ def _main(args):
             mask_grid = input_mtz.transform_f_phi_to_map("FWT", "PHWT")
 
 
-    input_array, mask_array, minimum = _interpolate_input_grids(input_grid, mask_grid)
-    output_array = _predict_output_array(input_array, args.m, mask_array)
+    input_array, difference_array, mask_array, minimum = _interpolate_input_grids(input_grid, difference_grid, mask_grid)
+    output_array = _predict_output_array(input_array, difference_array, args.m, mask_array)
 
     output_grid = _interpolate_output_array(output_array, input_grid, minimum)
     _write_output(output_grid, str(output / f"output.map"))
@@ -70,7 +77,7 @@ def _main(args):
     
 
 
-def _interpolate_input_grids(input_grid: gemmi.FloatGrid, mask_grid: gemmi.FloatGrid):
+def _interpolate_input_grids(input_grid: gemmi.FloatGrid, diff_grid: gemmi.FloatGrid, mask_grid: gemmi.FloatGrid):
     logging.info("Interpolating the input map with a cuboid of points around the ASU")
     extent = gemmi.find_asu_brick(input_grid.spacegroup).get_extent()
     box = input_grid.unit_cell.orthogonalize_box(extent)
@@ -81,8 +88,12 @@ def _interpolate_input_grids(input_grid: gemmi.FloatGrid, mask_grid: gemmi.Float
     num_z = -(-int(size.z / _SPACING) // _HALF * _HALF)
     scale = gemmi.Mat33([[_SPACING, 0, 0], [0, _SPACING, 0], [0, 0, _SPACING]])
     transform = gemmi.Transform(scale, box.minimum)
+    
     array = np.zeros((num_x, num_y, num_z), dtype=np.float32)
     input_grid.interpolate_values(array, transform)
+
+    diff_array = np.zeros((num_x, num_y, num_z), dtype=np.float32)
+    diff_grid.interpolate_values(diff_array, transform)
 
     mask_array = None
     if mask_grid:
@@ -90,11 +101,11 @@ def _interpolate_input_grids(input_grid: gemmi.FloatGrid, mask_grid: gemmi.Float
         mask_grid.interpolate_values(mask_array, transform)
 
     logging.info("Created a %dx%dx%d box", num_x, num_y, num_z)
-    return array, mask_array, box.minimum
+    return array, diff_array, mask_array, box.minimum
 
 
 def _predict_output_array(
-    input_array: np.ndarray,  model: str, mask_array: np.ndarray) -> np.ndarray:
+    input_array: np.ndarray, difference_array: np.ndarray,  model: str, mask_array: np.ndarray) -> np.ndarray:
     logging.info("Using the U-Net to predict overlapping samples")
     custom_objects={"sigmoid_focal_crossentropy": sigmoid_focal_crossentropy}
 
@@ -108,7 +119,12 @@ def _predict_output_array(
             for k in range(0, input_array.shape[2] - _HALF, _HALF):
                 input_sub = input_array[i : i + _SIZE, j : j + _SIZE, k : k + _SIZE]
                 input_sub = input_sub[np.newaxis, ..., np.newaxis]
-                output_sub = model(input_sub).numpy().squeeze()
+                
+                difference_sub = difference_array[i : i + _SIZE, j : j + _SIZE, k : k + _SIZE]
+                difference_sub = difference_sub[np.newaxis, ..., np.newaxis]
+                
+                combined_sub = tf.concat([input_sub, difference_sub], axis=-1)
+                output_sub = model(combined_sub).numpy().squeeze()
                 output_sub = np.argmax(output_sub, axis=-1)
 
                 total_array[i : i + _SIZE, j : j + _SIZE, k : k + _SIZE] += output_sub
@@ -146,7 +162,8 @@ def _write_output(output_grid: gemmi.FloatGrid, path: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", help="Path to input MTZ")
+    parser.add_argument("-i", help="Path to input best map or MTZ")
+    parser.add_argument("-d", help="Path to input difference")
     parser.add_argument("-o", help="Path to output map")
     parser.add_argument("-c", help="Path to config file", required=True)
     parser.add_argument("-m", help="Path to model", required=True)

@@ -9,6 +9,7 @@ CACHE_DIR = BASE_DIR / ".cache"
 
 DATASET_BASE_DIR = Path("dataset")
 
+DATASET_PATH = Path("dataset.csv")
 
 class DataSources(enum.Enum):
     local = 1
